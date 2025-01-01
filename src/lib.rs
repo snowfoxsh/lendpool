@@ -10,7 +10,7 @@ use std::sync::{Condvar, Mutex};
 #[cfg(feature = "async")]
 use tokio::sync::Notify;
 
-pub struct LoanPool<T> {
+pub struct LendPool<T> {
     queue: SegQueue<T>,
 
     available: AtomicUsize,
@@ -25,13 +25,13 @@ pub struct LoanPool<T> {
     _notify: Notify,
 }
 
-impl<T> Default for LoanPool<T> {
+impl<T> Default for LendPool<T> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T> LoanPool<T> {
+impl<T> LendPool<T> {
     pub fn new() -> Self {
         Self {
             queue: SegQueue::new(),
@@ -101,7 +101,7 @@ impl<T> LoanPool<T> {
 }
 
 #[cfg(feature = "sync")]
-impl<T> LoanPool<T> {
+impl<T> LendPool<T> {
     pub fn loan_sync(&self) -> Loan<T> {
         loop {
             if let Some(loaned) = self.loan() {
@@ -115,7 +115,7 @@ impl<T> LoanPool<T> {
 }
 
 #[cfg(feature = "async")]
-impl<T> LoanPool<T> {
+impl<T> LendPool<T> {
     pub async fn loan_async(&self) -> Loan<T> {
         loop {
             if let Some(loan) = self.loan() {
@@ -131,7 +131,7 @@ impl<T> LoanPool<T> {
 #[derive(Debug)]
 pub struct Loan<'lp, T> {
     item: Option<T>,
-    lp: &'lp LoanPool<T>,
+    lp: &'lp LendPool<T>,
 }
 
 impl<T> Loan<'_, T> {
@@ -200,22 +200,22 @@ impl<T> Drop for Loan<'_, T> {
 }
 
 pub trait PoolRef<'lp, T> {
-    fn pool_ref(&'lp self) -> &'lp LoanPool<T>;
+    fn pool_ref(&'lp self) -> &'lp LendPool<T>;
 }
 
-impl<'lp, T> PoolRef<'lp, T> for LoanPool<T> {
-    fn pool_ref(&'lp self) -> &'lp LoanPool<T> {
+impl<'lp, T> PoolRef<'lp, T> for LendPool<T> {
+    fn pool_ref(&'lp self) -> &'lp LendPool<T> {
         self
     }
 }
 
 impl<'lp, T> PoolRef<'lp, T> for Loan<'lp, T> {
-    fn pool_ref(&'lp self) -> &'lp LoanPool<T> {
+    fn pool_ref(&'lp self) -> &'lp LendPool<T> {
         self.lp
     }
 }
 
-impl<T> Debug for LoanPool<T> {
+impl<T> Debug for LendPool<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("LoanPool")
             .field("available", &self.available())
