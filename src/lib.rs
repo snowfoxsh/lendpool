@@ -128,6 +128,7 @@ impl<T> LoanPool<T> {
     }
 }
 
+#[derive(Debug)]
 pub struct Loan<'lp, T> {
     item: Option<T>,
     lp: &'lp LoanPool<T>,
