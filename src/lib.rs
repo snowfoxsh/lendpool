@@ -1,7 +1,7 @@
-use std::fmt::{Debug, Formatter};
-use std::{fmt, mem};
-use std::ops::{Deref, DerefMut};
 use crossbeam_queue::SegQueue;
+use std::fmt::{Debug, Formatter};
+use std::ops::{Deref, DerefMut};
+use std::{fmt, mem};
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 #[cfg(feature = "sync")]
@@ -15,12 +15,12 @@ pub struct LoanPool<T> {
 
     available: AtomicUsize,
     on_loan: AtomicUsize,
-    
+
     #[cfg(feature = "sync")]
     _mutex: Mutex<()>,
     #[cfg(feature = "sync")]
     _condvar: Condvar,
-   
+
     #[cfg(feature = "async")]
     _notify: Notify,
 }
@@ -37,7 +37,7 @@ impl<T> LoanPool<T> {
             queue: SegQueue::new(),
             available: AtomicUsize::new(0),
             on_loan: AtomicUsize::new(0),
-            
+
             #[cfg(feature = "sync")]
             _mutex: Mutex::new(()),
             #[cfg(feature = "sync")]
@@ -56,7 +56,7 @@ impl<T> LoanPool<T> {
         {
             self._notify.notify_one();
         }
-        
+
         #[cfg(feature = "sync")]
         {
             let _lock = self._mutex.lock().unwrap();
@@ -65,10 +65,18 @@ impl<T> LoanPool<T> {
     }
 
     pub fn loan(&self) -> Option<Loan<T>> {
-        self.queue.pop()
-            .map(|item| Loan { item: Some(item), lp: self} )
-            .inspect(|_| { self.on_loan.fetch_add(1, Ordering::SeqCst); })
-            .inspect(|_| { self.available.fetch_sub(1, Ordering::SeqCst); })
+        self.queue
+            .pop()
+            .map(|item| Loan {
+                item: Some(item),
+                lp: self,
+            })
+            .inspect(|_| {
+                self.on_loan.fetch_add(1, Ordering::SeqCst);
+            })
+            .inspect(|_| {
+                self.available.fetch_sub(1, Ordering::SeqCst);
+            })
     }
 
     pub fn available(&self) -> usize {
@@ -97,7 +105,7 @@ impl<T> LoanPool<T> {
     pub fn loan_sync(&self) -> Loan<T> {
         loop {
             if let Some(loaned) = self.loan() {
-                return loaned
+                return loaned;
             }
 
             let _lock = self._mutex.lock().unwrap();
@@ -111,7 +119,7 @@ impl<T> LoanPool<T> {
     pub async fn loan_async(&self) -> Loan<T> {
         loop {
             if let Some(loan) = self.loan() {
-                return loan
+                return loan;
             }
 
             // wait if no item is available
@@ -148,10 +156,9 @@ impl<T> Loan<'_, T> {
     pub fn swap_pool(&mut self, other: &mut Loan<'_, T>) {
         mem::swap(&mut self.item, &mut other.item)
     }
-
 }
 
-impl <'lp, T> Loan<'lp, T> {
+impl<'lp, T> Loan<'lp, T> {
     pub fn move_pool(&mut self, pool: &'lp (impl PoolRef<'lp, T> + 'lp)) {
         self.lp = pool.pool_ref();
     }
@@ -195,7 +202,7 @@ pub trait PoolRef<'lp, T> {
     fn pool_ref(&'lp self) -> &'lp LoanPool<T>;
 }
 
-impl<'lp, T> PoolRef<'lp, T> for LoanPool<T>{
+impl<'lp, T> PoolRef<'lp, T> for LoanPool<T> {
     fn pool_ref(&'lp self) -> &'lp LoanPool<T> {
         self
     }
