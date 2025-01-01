@@ -64,7 +64,7 @@ impl<T> LoanPool<T> {
         }
     }
 
-    pub fn try_loan(&self) -> Option<Loan<T>> {
+    pub fn loan(&self) -> Option<Loan<T>> {
         self.queue.pop()
             .map(|item| Loan { item: Some(item), lp: self} )
             .inspect(|_| { self.on_loan.fetch_add(1, Ordering::SeqCst); })
@@ -94,9 +94,9 @@ impl<T> LoanPool<T> {
 
 #[cfg(feature = "sync")]
 impl<T> LoanPool<T> {
-    pub fn loan(&self) -> Loan<T> {
+    pub fn loan_sync(&self) -> Loan<T> {
         loop {
-            if let Some(loaned) = self.try_loan() {
+            if let Some(loaned) = self.loan() {
                 return loaned
             }
 
@@ -108,9 +108,9 @@ impl<T> LoanPool<T> {
 
 #[cfg(feature = "async")]
 impl<T> LoanPool<T> {
-    pub async fn async_loan(&self) -> Loan<T> {
+    pub async fn loan_async(&self) -> Loan<T> {
         loop {
-            if let Some(loan) = self.try_loan() {
+            if let Some(loan) = self.loan() {
                 return loan
             }
 
