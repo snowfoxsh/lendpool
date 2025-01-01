@@ -2,9 +2,12 @@ use std::fmt::{Debug, Formatter};
 use std::{fmt, mem};
 use std::ops::{Deref, DerefMut};
 use crossbeam_queue::SegQueue;
+
 use std::sync::atomic::{AtomicUsize, Ordering};
+#[cfg(feature = "sync")]
 use std::sync::{Condvar, Mutex};
 
+#[cfg(feature = "async")]
 use tokio::sync::Notify;
 
 pub struct LoanPool<T> {
@@ -13,9 +16,12 @@ pub struct LoanPool<T> {
     available: AtomicUsize,
     on_loan: AtomicUsize,
     
+    #[cfg(feature = "sync")]
     _mutex: Mutex<()>,
+    #[cfg(feature = "sync")]
     _condvar: Condvar,
-    
+   
+    #[cfg(feature = "async")]
     _notify: Notify,
 }
 
@@ -32,9 +38,12 @@ impl<T> LoanPool<T> {
             available: AtomicUsize::new(0),
             on_loan: AtomicUsize::new(0),
             
+            #[cfg(feature = "sync")]
             _mutex: Mutex::new(()),
+            #[cfg(feature = "sync")]
             _condvar: Condvar::new(),
-            
+
+            #[cfg(feature = "async")]
             _notify: Notify::new(),
         }
     }
@@ -42,13 +51,17 @@ impl<T> LoanPool<T> {
     pub fn add(&self, item: T) {
         self.available.fetch_add(1, Ordering::SeqCst);
         self.queue.push(item);
+
+        #[cfg(feature = "async")]
+        {
+            self._notify.notify_one();
+        }
         
-        // async 
-        self._notify.notify_one();
-        
-        // sync
-        let _lock = self._mutex.lock().unwrap();
-        self._condvar.notify_one();
+        #[cfg(feature = "sync")]
+        {
+            let _lock = self._mutex.lock().unwrap();
+            self._condvar.notify_one();
+        }
     }
 
     pub fn try_loan(&self) -> Option<Loan<T>> {
@@ -77,24 +90,30 @@ impl<T> LoanPool<T> {
     pub fn total(&self) -> usize {
         self.on_loan() + self.available()
     }
-    
+}
+
+#[cfg(feature = "sync")]
+impl<T> LoanPool<T> {
     pub fn loan(&self) -> Loan<T> {
         loop {
             if let Some(loaned) = self.try_loan() {
                 return loaned
             }
-            
+
             let _lock = self._mutex.lock().unwrap();
             let _wait = self._condvar.wait(_lock).unwrap();
         }
     }
-    
+}
+
+#[cfg(feature = "async")]
+impl<T> LoanPool<T> {
     pub async fn async_loan(&self) -> Loan<T> {
         loop {
             if let Some(loan) = self.try_loan() {
                 return loan
             }
-            
+
             // wait if no item is available
             self._notify.notified().await
         }
