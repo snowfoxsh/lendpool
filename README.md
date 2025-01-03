@@ -1,6 +1,6 @@
 # LendPool
 
-LendPool is a simple library for allowing safe and concurrent access to a group of objects across threads.
+LendPool is a simple library for allowing safe and concurrent access to a group of objects.
 It achieves this with a [`Loan<T>`](https://docs.rs/lendpool/latest/struct.Notify.html) guard. 
 
 # Example Usage
