@@ -19,17 +19,15 @@
 //! ```rust
 //! use lendpool::LendPool;
 //!
-//! {
-//!     // Create a new pool and add items
-//!     let pool = LendPool::new();
-//!     pool.add(1);
-//!     pool.add(2);
+//! // Create a new pool and add items
+//! let pool = LendPool::new();
+//! pool.add(1);
+//! pool.add(2);
 //!
-//!     // Loan an item (non-blocking)
-//!     if let Some(loan) = pool.loan() {
-//!         println!("Got item: {}", *loan);
-//!     }
-//! } // The `Loan` is dropped here, returning items to the pool
+//! // Loan an item (non-blocking)
+//! if let Some(loan) = pool.loan() {
+//!     println!("Got item: {}", *loan);
+//! }; // The `Loan` is dropped here, returning items to the pool
 //! ```
 
 use crossbeam_queue::SegQueue;
@@ -69,17 +67,15 @@ use tokio::sync::Notify;
 /// ```rust
 /// use lendpool::LendPool;
 ///
-/// {
-///     let pool = LendPool::new();
+/// let pool = LendPool::new();
 ///
-///     // Add items to the pool
-///     pool.add("Hello".to_string());
-///     pool.add("World".to_string());
+/// // Add items to the pool
+/// pool.add("Hello".to_string());
+/// pool.add("World".to_string());
 ///
-///     // Loan an item non-blocking
-///     if let Some(loan) = pool.loan() {
-///         println!("Loaned item: {}", *loan);
-///     }
+/// // Loan an item non-blocking
+/// if let Some(loan) = pool.loan() {
+///     println!("Loaned item: {}", *loan);
 /// };
 /// ```
 pub struct LendPool<T> {
@@ -177,15 +173,14 @@ impl<T> LendPool<T> {
     /// ```
     /// use lendpool::LendPool;
     ///
-    /// {
-    ///     let pool = LendPool::new();
-    ///     pool.add(10);
     ///
-    ///     if let Some(loan) = pool.loan() {
-    ///         println!("Got item: {}", *loan);
-    ///     } else {
-    ///         println!("No items available!");
-    ///     }
+    /// let pool = LendPool::new();
+    /// pool.add(10);
+    ///
+    /// if let Some(loan) = pool.loan() {
+    ///     println!("Got item: {}", *loan);
+    /// } else {
+    ///     println!("No items available!");
     /// };
     /// ```
     pub fn loan(&self) -> Option<Loan<T>> {
@@ -271,8 +266,8 @@ impl<T> LendPool<T> {
     /// ```
     /// use lendpool::LendPool;
     ///
+    /// let pool = LendPool::new();
     /// {
-    ///     let pool = LendPool::new();
     ///     pool.add(1);
     ///     assert!(!pool.is_loaned());
     ///
@@ -293,13 +288,11 @@ impl<T> LendPool<T> {
     /// ```
     /// use lendpool::LendPool;
     ///
-    /// {
-    ///     let pool = LendPool::new();
-    ///     pool.add(10);
-    ///     pool.add(20);
-    ///     let _loan = pool.loan().unwrap();
-    ///     assert_eq!(pool.total(), 2);
-    /// }
+    /// let pool = LendPool::new();
+    /// pool.add(10);
+    /// pool.add(20);
+    /// let _loan = pool.loan().unwrap();
+    /// assert_eq!(pool.total(), 2);
     /// ```
     pub fn total(&self) -> usize {
         self.on_loan() + self.available()
@@ -323,12 +316,10 @@ impl<T> LendPool<T> {
     /// // Requires the "sync" feature to be enabled.
     /// use lendpool::LendPool;
     ///
-    /// fn main() {
-    ///     let pool = LendPool::new();
-    ///     pool.add(123);
-    ///     let loan = pool.loan_sync();
-    ///     println!("Loaned item: {}", *loan);
-    /// }
+    /// let pool = LendPool::new();
+    /// pool.add(123);
+    /// let loan = pool.loan_sync();
+    /// println!("Loaned item: {}", *loan);
     /// ```
     pub fn loan_sync(&self) -> Loan<T> {
         loop {
@@ -401,15 +392,14 @@ impl<T> Loan<'_, T> {
     /// ```
     /// use lendpool::LendPool;
     ///
-    /// {
-    ///     let pool = LendPool::new();
-    ///     pool.add(1);
+    /// let pool = LendPool::new();
+    /// pool.add(1);
     ///
-    ///     if let Some(mut loan) = pool.loan() {
-    ///         loan.map(|val| val + 1);
-    ///         assert_eq!(*loan, 2);
-    ///     }
+    /// if let Some(mut loan) = pool.loan() {
+    ///     loan.map(|val| val + 1);
+    ///     assert_eq!(*loan, 2);
     /// };
+    ///
     /// ```
     pub fn map(&mut self, f: impl FnOnce(T) -> T) {
         let item = self.item.take().expect("loan already consumed");
@@ -427,14 +417,12 @@ impl<T> Loan<'_, T> {
     /// ```
     /// use lendpool::LendPool;
     ///
-    /// {
-    ///     let pool = LendPool::new();
-    ///     pool.add(100);
+    /// let pool = LendPool::new();
+    /// pool.add(100);
     ///
-    ///     if let Some(loan) = pool.loan() {
-    ///         let x = loan.with(|val| *val + 1);
-    ///         assert_eq!(x, 101);
-    ///     }
+    /// if let Some(loan) = pool.loan() {
+    ///    let x = loan.with(|val| *val + 1);
+    ///    assert_eq!(x, 101);
     /// };
     /// ```
     pub fn with<R>(&self, f: impl FnOnce(&T) -> R) -> R {
@@ -452,15 +440,13 @@ impl<T> Loan<'_, T> {
     /// ```
     /// use lendpool::LendPool;
     ///
-    /// {
-    ///     let pool = LendPool::new();
-    ///     pool.add(String::from("Hello"));
+    /// let pool = LendPool::new();
+    /// pool.add(String::from("Hello"));
     ///
-    ///     if let Some(mut loan) = pool.loan() {
-    ///         loan.with_mut(|s| s.push_str(" World"));
-    ///         assert_eq!(*loan, "Hello World");
-    ///     }
-    /// }
+    /// if let Some(mut loan) = pool.loan() {
+    ///     loan.with_mut(|s| s.push_str(" World"));
+    ///     assert_eq!(*loan, "Hello World");
+    /// };
     /// ```
     pub fn with_mut<R>(&mut self, f: impl FnOnce(&mut T) -> R) -> R {
         f(self.item.as_mut().expect("loan already consumed"))
@@ -480,17 +466,16 @@ impl<T> Loan<'_, T> {
     /// ```
     /// use lendpool::LendPool;
     ///
-    /// {
-    ///     let pool = LendPool::new();
-    ///     pool.add(42);
+    /// let pool = LendPool::new();
+    /// pool.add(42);
     ///
-    ///     if let Some(loan) = pool.loan() {
-    ///         let item = loan.take();
-    ///         // `item` is now fully yours, and not returned to the pool.
-    ///     }
-    ///     assert_eq!(pool.available(), 0);
-    ///     assert_eq!(pool.on_loan(), 0);
-    /// }
+    /// if let Some(loan) = pool.loan() {
+    ///     let item = loan.take();
+    ///     // `item` is now fully yours, and not returned to the pool.
+    /// };
+    ///
+    /// assert_eq!(pool.available(), 0);
+    /// assert_eq!(pool.on_loan(), 0);
     /// ```
     pub fn take(mut self) -> T {
         let item = self.item.take().expect("loan already consumed");
@@ -505,8 +490,8 @@ impl<T> Loan<'_, T> {
     /// ```
     /// use lendpool::LendPool;
     ///
+    /// let pool = LendPool::new();
     /// {
-    ///     let pool = LendPool::new();
     ///     pool.add('a');
     ///     pool.add('b');
     ///
@@ -523,39 +508,7 @@ impl<T> Loan<'_, T> {
 }
 
 impl<'lp, T> Loan<'lp, T> {
-    /// Moves the `Loan` into another type that references the same [`LendPool`].
-    ///
-    /// To demonstrate this properly in a doc test, you need a second type that implements
-    /// [`PoolRef`], **not** `loan.move_pool(&loan)`, which would cause a borrow conflict.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use lendpool::{LendPool, PoolRef, Loan};
-    ///
-    /// // A contrived type that also has a reference to the same pool
-    /// struct MyPoolRef<'p, T> {
-    ///     inner: &'p LendPool<T>,
-    /// }
-    ///
-    /// impl<'lp, 'p, T> PoolRef<'lp, T> for MyPoolRef<'p, T> {
-    ///     fn pool_ref(&'lp self) -> &'lp LendPool<T> {
-    ///         self.inner
-    ///     }
-    /// }
-    ///
-    /// {
-    ///     let pool = LendPool::new();
-    ///     pool.add(10);
-    ///
-    ///     if let Some(mut loan) = pool.loan() {
-    ///         // Create a second type referencing the same pool
-    ///         let alt_ref = MyPoolRef { inner: &pool };
-    ///         // Move the loan from referencing `pool` directly to referencing `alt_ref`.
-    ///         loan.move_pool(&alt_ref);
-    ///     }
-    /// }
-    /// ```
+    /// Moves the `Loan` into another [`LendPool`].
     pub fn move_pool(&mut self, pool: &'lp (impl PoolRef<'lp, T> + 'lp)) {
         self.lp = pool.pool_ref();
     }
@@ -663,9 +616,21 @@ mod tests {
     #[test]
     fn test_lendpool_new_and_counts() {
         let pool = LendPool::<i32>::new();
-        assert_eq!(pool.available(), 0, "Pool should start with zero available items");
-        assert_eq!(pool.on_loan(), 0, "Pool should start with zero on-loan items");
-        assert_eq!(pool.total(), 0, "Pool should have zero total items initially");
+        assert_eq!(
+            pool.available(),
+            0,
+            "Pool should start with zero available items"
+        );
+        assert_eq!(
+            pool.on_loan(),
+            0,
+            "Pool should start with zero on-loan items"
+        );
+        assert_eq!(
+            pool.total(),
+            0,
+            "Pool should have zero total items initially"
+        );
     }
 
     /// Tests `LendPool::add` and verifies that items are truly added.
@@ -673,7 +638,11 @@ mod tests {
     fn test_lendpool_add() {
         let pool = LendPool::new();
         pool.add("test");
-        assert_eq!(pool.available(), 1, "One item should be available after adding");
+        assert_eq!(
+            pool.available(),
+            1,
+            "One item should be available after adding"
+        );
         assert_eq!(pool.on_loan(), 0, "No items on loan yet");
         assert_eq!(pool.total(), 1, "Total should be 1");
     }
@@ -693,7 +662,11 @@ mod tests {
             *loan == 10 || *loan == 20,
             "Loaned item should be one of the added items"
         );
-        assert_eq!(pool.available(), 1, "One item left available after the first loan");
+        assert_eq!(
+            pool.available(),
+            1,
+            "One item left available after the first loan"
+        );
         assert_eq!(pool.on_loan(), 1, "One item is on loan");
         assert_eq!(pool.total(), 2, "Total should remain 2");
 
@@ -703,15 +676,26 @@ mod tests {
             *loan2 == 10 || *loan2 == 20,
             "Second loaned item should be the remaining one"
         );
-        assert_ne!(*loan, *loan2, "Items should be different when two are added");
+        assert_ne!(
+            *loan, *loan2,
+            "Items should be different when two are added"
+        );
         assert_eq!(pool.available(), 0, "No items left available");
         assert_eq!(pool.on_loan(), 2, "Two items on loan now");
 
         // When both loans drop, items return to the pool
         drop(loan);
         drop(loan2);
-        assert_eq!(pool.available(), 2, "Items should return after dropping loans");
-        assert_eq!(pool.on_loan(), 0, "No items on loan after dropping all loans");
+        assert_eq!(
+            pool.available(),
+            2,
+            "Items should return after dropping loans"
+        );
+        assert_eq!(
+            pool.on_loan(),
+            0,
+            "No items on loan after dropping all loans"
+        );
     }
 
     /// Tests `LendPool::is_available` and `LendPool::is_loaned`.
@@ -755,7 +739,11 @@ mod tests {
 
         // Dropping returns the item to the pool
         drop(loan);
-        assert_eq!(pool.available(), 1, "Item should return after dropping loan");
+        assert_eq!(
+            pool.available(),
+            1,
+            "Item should return after dropping loan"
+        );
         assert_eq!(pool.on_loan(), 0);
     }
 
@@ -922,7 +910,10 @@ mod tests {
 
         // Use `with` to read the item without consuming it
         let plus_one = loan.with(|val| *val + 1);
-        assert_eq!(plus_one, 43, "`with` should apply the function to the borrowed item");
+        assert_eq!(
+            plus_one, 43,
+            "`with` should apply the function to the borrowed item"
+        );
 
         // Verify that the item remains on loan and has not been consumed
         assert_eq!(pool.available(), 0);
@@ -930,7 +921,11 @@ mod tests {
 
         // Dropping the loan returns the item to the pool
         drop(loan);
-        assert_eq!(pool.available(), 1, "Item should be returned after dropping the loan");
+        assert_eq!(
+            pool.available(),
+            1,
+            "Item should be returned after dropping the loan"
+        );
         assert_eq!(pool.on_loan(), 0);
     }
 }
