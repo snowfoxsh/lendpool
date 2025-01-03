@@ -320,7 +320,10 @@ impl<T> LendPool<T> {
             }
 
             let _lock = self._mutex.lock().expect("mutex has been poisoned");
-            let _wait = self._condvar.wait(_lock).expect("condvar has been poisoned");
+            let _wait = self
+                ._condvar
+                .wait(_lock)
+                .expect("condvar has been poisoned");
         }
     }
 }
