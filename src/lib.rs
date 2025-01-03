@@ -59,8 +59,6 @@ use tokio::sync::Notify;
 /// 2. Add items to the pool using [`add`][Self::add].
 /// 3. Loan items out using one of the `loan` methods.
 /// 4. Use the [`Loan`] guard to access or mutate the underlying item.
-/// 5. Drop or explicitly [`take`][Loan::take] the item. Dropping returns the item to the pool, while
-///    `take` permanently removes it.
 ///
 /// # Examples
 ///
@@ -223,13 +221,11 @@ impl<T> LendPool<T> {
     /// ```
     /// use lendpool::LendPool;
     ///
-    /// {
-    ///     let pool = LendPool::new();
-    ///     pool.add(42);
+    /// let pool = LendPool::new();
+    /// pool.add(42);
     ///
-    ///     if pool.is_available() {
-    ///         println!("Pool has at least one item!");
-    ///     }
+    /// if pool.is_available() {
+    ///     println!("Pool has at least one item!");
     /// };
     /// ```
     pub fn is_available(&self) -> bool {
@@ -243,17 +239,15 @@ impl<T> LendPool<T> {
     /// ```
     /// use lendpool::LendPool;
     ///
+    /// let pool = LendPool::new();
+    /// pool.add(100);
+    ///
     /// {
-    ///     let pool = LendPool::new();
-    ///     pool.add(100);
-    ///
-    ///     {
-    ///         let _loan = pool.loan().unwrap();
-    ///         assert_eq!(pool.on_loan(), 1);
-    ///     }
-    ///
-    ///     assert_eq!(pool.on_loan(), 0);
+    ///     let _loan = pool.loan().unwrap();
+    ///     assert_eq!(pool.on_loan(), 1);
     /// };
+    ///
+    /// assert_eq!(pool.on_loan(), 0);
     /// ```
     pub fn on_loan(&self) -> usize {
         self.on_loan.load(Ordering::SeqCst)
@@ -267,13 +261,11 @@ impl<T> LendPool<T> {
     /// use lendpool::LendPool;
     ///
     /// let pool = LendPool::new();
-    /// {
-    ///     pool.add(1);
-    ///     assert!(!pool.is_loaned());
+    /// pool.add(1);
+    /// assert!(!pool.is_loaned());
     ///
-    ///     let loan = pool.loan().unwrap();
-    ///     assert!(pool.is_loaned());
-    /// }
+    /// let loan = pool.loan().unwrap();
+    /// assert!(pool.is_loaned());
     /// ```
     pub fn is_loaned(&self) -> bool {
         self.on_loan() != 0
@@ -327,8 +319,8 @@ impl<T> LendPool<T> {
                 return loaned;
             }
 
-            let _lock = self._mutex.lock().unwrap();
-            let _wait = self._condvar.wait(_lock).unwrap();
+            let _lock = self._mutex.lock().expect("mutex has been poisoned");
+            let _wait = self._condvar.wait(_lock).expect("condvar has been poisoned");
         }
     }
 }
@@ -491,16 +483,14 @@ impl<T> Loan<'_, T> {
     /// use lendpool::LendPool;
     ///
     /// let pool = LendPool::new();
-    /// {
-    ///     pool.add('a');
-    ///     pool.add('b');
+    /// pool.add('a');
+    /// pool.add('b');
     ///
-    ///     let mut loan1 = pool.loan().unwrap();
-    ///     let mut loan2 = pool.loan().unwrap();
+    /// let mut loan1 = pool.loan().unwrap();
+    /// let mut loan2 = pool.loan().unwrap();
     ///
-    ///     loan1.swap_pool(&mut loan2);
-    ///     // Now loan1 has what loan2 had, and vice versa.
-    /// }
+    /// loan1.swap_pool(&mut loan2);
+    /// // Now loan1 has what loan2 had, and vice versa.
     /// ```
     pub fn swap_pool(&mut self, other: &mut Loan<'_, T>) {
         mem::swap(&mut self.item, &mut other.item)
