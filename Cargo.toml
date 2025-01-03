@@ -2,7 +2,15 @@
 name = "lendpool"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
+authors = ["Patrick Unick <dev_storm@winux.com>"]
 description = "A simple lock-free library for allowing safe and concurrent access to a group of objects"
+documentation = "https://docs.rs/lendpool"
+repository = "https://github.com/snowfoxsh/lendpool"
+homepage = "https://github.com/snowfoxsh/lendpool"
+keywords = ["pool", "object-pool", "atomic", "non-blocking", "lock-free"]
+categories = ["asynchronous", "concurrency", "data-structures", "memory-management"]
+readme = "README.md"
 
 [dependencies]
 crossbeam-queue = { version = "0.3.12" }
