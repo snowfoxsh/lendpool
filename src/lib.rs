@@ -615,6 +615,8 @@ impl<T> Drop for Loan<'_, T> {
     fn drop(&mut self) {
         if let Some(item) = self.item.take() {
             self.lp.queue.push(item);
+            self.lp.on_loan.fetch_sub(1, Ordering::SeqCst);
+            self.lp.available.fetch_add(1, Ordering::SeqCst);
         }
     }
 }
@@ -651,5 +653,284 @@ impl<T> Debug for LendPool<T> {
             .field("on_loan", &self.on_loan())
             .field("total", &self.total())
             .finish()
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Tests `LendPool::new`, `LendPool::available`, `LendPool::on_loan`, and `LendPool::total`.
+    #[test]
+    fn test_lendpool_new_and_counts() {
+        let pool = LendPool::<i32>::new();
+        assert_eq!(pool.available(), 0, "Pool should start with zero available items");
+        assert_eq!(pool.on_loan(), 0, "Pool should start with zero on-loan items");
+        assert_eq!(pool.total(), 0, "Pool should have zero total items initially");
+    }
+
+    /// Tests `LendPool::add` and verifies that items are truly added.
+    #[test]
+    fn test_lendpool_add() {
+        let pool = LendPool::new();
+        pool.add("test");
+        assert_eq!(pool.available(), 1, "One item should be available after adding");
+        assert_eq!(pool.on_loan(), 0, "No items on loan yet");
+        assert_eq!(pool.total(), 1, "Total should be 1");
+    }
+
+    /// Tests `LendPool::loan` in a non-blocking scenario.
+    #[test]
+    fn test_lendpool_loan_non_blocking() {
+        let pool = LendPool::new();
+        pool.add(10);
+        pool.add(20);
+
+        // First loan
+        let loan_opt = pool.loan();
+        assert!(loan_opt.is_some(), "Should be able to loan an item");
+        let loan = loan_opt.unwrap();
+        assert!(
+            *loan == 10 || *loan == 20,
+            "Loaned item should be one of the added items"
+        );
+        assert_eq!(pool.available(), 1, "One item left available after the first loan");
+        assert_eq!(pool.on_loan(), 1, "One item is on loan");
+        assert_eq!(pool.total(), 2, "Total should remain 2");
+
+        // Second loan
+        let loan2 = pool.loan().expect("Another item should be available");
+        assert!(
+            *loan2 == 10 || *loan2 == 20,
+            "Second loaned item should be the remaining one"
+        );
+        assert_ne!(*loan, *loan2, "Items should be different when two are added");
+        assert_eq!(pool.available(), 0, "No items left available");
+        assert_eq!(pool.on_loan(), 2, "Two items on loan now");
+
+        // When both loans drop, items return to the pool
+        drop(loan);
+        drop(loan2);
+        assert_eq!(pool.available(), 2, "Items should return after dropping loans");
+        assert_eq!(pool.on_loan(), 0, "No items on loan after dropping all loans");
+    }
+
+    /// Tests `LendPool::is_available` and `LendPool::is_loaned`.
+    #[test]
+    fn test_lendpool_is_available_and_is_loaned() {
+        let pool = LendPool::new();
+        assert!(!pool.is_available(), "No items are in the pool yet");
+        assert!(!pool.is_loaned(), "No items are on loan yet");
+
+        pool.add(1);
+        assert!(pool.is_available(), "Pool has at least one item");
+        assert!(!pool.is_loaned(), "No items loaned out yet");
+
+        let loan = pool.loan().unwrap();
+        assert!(!pool.is_available(), "No items left in the pool after loan");
+        assert!(pool.is_loaned(), "Now at least one item is on loan");
+
+        drop(loan);
+        assert!(pool.is_available(), "Item should be back in pool");
+        assert!(!pool.is_loaned(), "No items on loan after dropping");
+    }
+
+    /// Tests `Loan::map`, `Loan::with`, and `Loan::with_mut`.
+    #[test]
+    fn test_loan_transformations() {
+        let pool = LendPool::new();
+        pool.add(5);
+        let mut loan = pool.loan().expect("Should have an item to loan");
+
+        // Test `Loan::with` for read-only access
+        let doubled = loan.with(|val| *val * 2);
+        assert_eq!(doubled, 10);
+
+        // Test `Loan::with_mut` for mutable access
+        loan.with_mut(|val| *val += 10);
+        assert_eq!(*loan, 15);
+
+        // Test `Loan::map` to transform the item
+        loan.map(|val| val * 2);
+        assert_eq!(*loan, 30);
+
+        // Dropping returns the item to the pool
+        drop(loan);
+        assert_eq!(pool.available(), 1, "Item should return after dropping loan");
+        assert_eq!(pool.on_loan(), 0);
+    }
+
+    /// Tests `Loan::take` to permanently remove an item from the pool.
+    #[test]
+    fn test_loan_take() {
+        let pool = LendPool::new();
+        pool.add("Hello");
+        assert_eq!(pool.total(), 1);
+
+        {
+            let loan = pool.loan().expect("Item should be available");
+            let item = loan.take();
+            assert_eq!(item, "Hello");
+
+            // After calling `take`, nothing should be returned to the pool
+            assert_eq!(pool.on_loan(), 0, "No items should be on loan after take");
+            assert_eq!(pool.available(), 0, "Item is not returned to the pool");
+            assert_eq!(pool.total(), 0, "Pool total is effectively zero now");
+        }
+
+        // Double-check the pool after the loan scope ends
+        assert_eq!(pool.available(), 0, "Still no items in the pool");
+        assert_eq!(pool.on_loan(), 0);
+        assert_eq!(pool.total(), 0);
+    }
+
+    /// Tests `Loan::swap_pool` by swapping items from two different loans.
+    #[test]
+    fn test_loan_swap_pool() {
+        let pool = LendPool::new();
+        pool.add('x');
+        pool.add('y');
+
+        let mut loan1 = pool.loan().unwrap();
+        let mut loan2 = pool.loan().unwrap();
+        let val1 = *loan1;
+        let val2 = *loan2;
+
+        // Swap them
+        loan1.swap_pool(&mut loan2);
+        assert_eq!(*loan1, val2);
+        assert_eq!(*loan2, val1);
+
+        // Drop them in reverse order
+        drop(loan1);
+        drop(loan2);
+
+        assert_eq!(pool.available(), 2, "Both items returned to the pool");
+        assert_eq!(pool.on_loan(), 0);
+    }
+
+    /// Tests `AsRef`, `AsMut`, `Deref`, and `DerefMut` from `Loan`.
+    #[test]
+    fn test_loan_as_ref_and_deref() {
+        let pool = LendPool::new();
+        pool.add(String::from("Hello World"));
+        let mut loan = pool.loan().expect("Should have a string to loan");
+
+        // Test `AsRef<T>`
+        assert_eq!(loan.as_ref(), "Hello World");
+
+        // Test `AsMut<T>`
+        loan.as_mut().push_str("!!!");
+        assert_eq!(loan.as_ref(), "Hello World!!!");
+
+        // Test `Deref`
+        assert_eq!(&*loan, "Hello World!!!");
+
+        // Test `DerefMut`
+        loan.push_str("???");
+        assert_eq!(&*loan, "Hello World!!!???");
+    }
+
+    /// Tests that dropping a `Loan` re-enqueues the item, using `Drop` impl.
+    #[test]
+    fn test_loan_drop() {
+        let pool = LendPool::new();
+        pool.add(99);
+
+        assert_eq!(pool.available(), 1);
+        assert_eq!(pool.on_loan(), 0);
+
+        {
+            let _loan = pool.loan().expect("Should be able to loan item");
+            assert_eq!(pool.available(), 0);
+            assert_eq!(pool.on_loan(), 1);
+        } // Loan drops here
+
+        assert_eq!(pool.available(), 1, "Item is returned to the pool on drop");
+        assert_eq!(pool.on_loan(), 0);
+    }
+
+    /// Tests the `Debug` implementation for `LendPool`.
+    #[test]
+    fn test_lendpool_debug() {
+        let pool = LendPool::new();
+        pool.add(1);
+        let debug_str = format!("{:?}", pool);
+
+        assert!(
+            debug_str.contains("LendPool"),
+            "Debug output should contain 'LendPool'"
+        );
+        assert!(
+            debug_str.contains("available"),
+            "Debug output should mention 'available'"
+        );
+        assert!(
+            debug_str.contains("on_loan"),
+            "Debug output should mention 'on_loan'"
+        );
+        assert!(
+            debug_str.contains("total"),
+            "Debug output should mention 'total'"
+        );
+    }
+
+    /// If you have the "sync" feature enabled, test the blocking method `loan_sync`.
+    #[cfg(feature = "sync")]
+    #[test]
+    fn test_lendpool_loan_sync() {
+        let pool = LendPool::new();
+        pool.add(123);
+
+        let loan = pool.loan_sync();
+        assert_eq!(*loan, 123);
+        assert_eq!(pool.available(), 0);
+        assert_eq!(pool.on_loan(), 1);
+
+        // Once dropped, the item is returned
+        drop(loan);
+        assert_eq!(pool.available(), 1);
+        assert_eq!(pool.on_loan(), 0);
+    }
+
+    /// If you have the "async" feature enabled, test the async method `loan_async`.
+    #[cfg(feature = "async")]
+    #[tokio::test]
+    async fn test_lendpool_loan_async() {
+        let pool = LendPool::new();
+        pool.add("hello");
+
+        let loan = pool.loan_async().await;
+        assert_eq!(*loan, "hello");
+        assert_eq!(pool.available(), 0);
+        assert_eq!(pool.on_loan(), 1);
+
+        // Once dropped, the item is returned
+        drop(loan);
+        assert_eq!(pool.available(), 1);
+        assert_eq!(pool.on_loan(), 0);
+    }
+
+    #[test]
+    fn test_loan_with_method() {
+        let pool = LendPool::new();
+        pool.add(42);
+
+        // Loan an item
+        let loan = pool.loan().expect("Should be able to loan an item");
+        assert_eq!(pool.available(), 0, "Item is now on loan");
+        assert_eq!(pool.on_loan(), 1);
+
+        // Use `with` to read the item without consuming it
+        let plus_one = loan.with(|val| *val + 1);
+        assert_eq!(plus_one, 43, "`with` should apply the function to the borrowed item");
+
+        // Verify that the item remains on loan and has not been consumed
+        assert_eq!(pool.available(), 0);
+        assert_eq!(pool.on_loan(), 1);
+
+        // Dropping the loan returns the item to the pool
+        drop(loan);
+        assert_eq!(pool.available(), 1, "Item should be returned after dropping the loan");
+        assert_eq!(pool.on_loan(), 0);
     }
 }
