@@ -19,17 +19,17 @@
 //! ```rust
 //! use lendpool::LendPool;
 //!
-//! // Create a new pool and add items
-//! let pool = LendPool::new();
-//! pool.add(1);
-//! pool.add(2);
+//! {
+//!     // Create a new pool and add items
+//!     let pool = LendPool::new();
+//!     pool.add(1);
+//!     pool.add(2);
 //!
-//! // Loan an item (non-blocking)
-//! if let Some(loan) = pool.loan() {
-//!     println!("Got item: {}", *loan);
-//! }
-//!
-//! // Once `loan` is dropped, the item is returned to the pool automatically.
+//!     // Loan an item (non-blocking)
+//!     if let Some(loan) = pool.loan() {
+//!         println!("Got item: {}", *loan);
+//!     }
+//! } // The `Loan` is dropped here, returning items to the pool
 //! ```
 
 use crossbeam_queue::SegQueue;
@@ -52,34 +52,35 @@ use tokio::sync::Notify;
 ///
 /// # Feature Flags
 ///
-/// - **sync** – Enables `loan_sync` for blocking usage.
-/// - **async** – Enables `loan_async` for asynchronous usage.
+/// - **sync** – Enables [`loan_sync`][Self::loan_sync] for blocking usage.
+/// - **async** – Enables [`loan_async`][Self::loan_async] for asynchronous usage.
 ///
 /// # Usage
 ///
-/// 1. Create a `LendPool` using [`new`].
-/// 2. Add items to the pool using [`add`].
+/// 1. Create a `LendPool` using [`LendPool::new`].
+/// 2. Add items to the pool using [`add`][Self::add].
 /// 3. Loan items out using one of the `loan` methods.
 /// 4. Use the [`Loan`] guard to access or mutate the underlying item.
-/// 5. Drop or explicitly [`take`] the item. Dropping returns the item to the pool, while
+/// 5. Drop or explicitly [`take`][Loan::take] the item. Dropping returns the item to the pool, while
 ///    `take` permanently removes it.
 ///
 /// # Examples
 ///
 /// ```rust
 /// use lendpool::LendPool;
-/// let pool = LendPool::new();
 ///
-/// // Add items to the pool
-/// pool.add("Hello".to_string());
-/// pool.add("World".to_string());
+/// {
+///     let pool = LendPool::new();
 ///
-/// // Loan an item non-blocking
-/// if let Some(loan) = pool.loan() {
-///     println!("Loaned item: {}", *loan);
-/// }
+///     // Add items to the pool
+///     pool.add("Hello".to_string());
+///     pool.add("World".to_string());
 ///
-/// // Item is automatically returned when loan goes out of scope
+///     // Loan an item non-blocking
+///     if let Some(loan) = pool.loan() {
+///         println!("Loaned item: {}", *loan);
+///     }
+/// };
 /// ```
 pub struct LendPool<T> {
     queue: SegQueue<T>,
@@ -98,7 +99,7 @@ pub struct LendPool<T> {
 impl<T> Default for LendPool<T> {
     /// Creates a new, empty `LendPool`.
     ///
-    /// This is equivalent to calling [`new`].
+    /// This is equivalent to calling [`new`][Self::new].
     fn default() -> Self {
         Self::new()
     }
@@ -107,12 +108,13 @@ impl<T> Default for LendPool<T> {
 impl<T> LendPool<T> {
     /// Creates a new, empty `LendPool`.
     ///
-    /// The pool will initially contain zero items. Add items via [`add`].
+    /// The pool will initially contain zero items. Add items via [`add`][Self::add].
     ///
     /// # Examples
     ///
     /// ```
     /// use lendpool::LendPool;
+    ///
     /// let pool: LendPool<i32> = LendPool::new();
     /// assert_eq!(pool.available(), 0);
     /// ```
@@ -136,16 +138,19 @@ impl<T> LendPool<T> {
     ///
     /// # Behavior
     ///
-    /// - Increments the count of [`available`] items.
+    /// - Increments the count of [`available()`][Self::available].
     /// - Notifies any blocking or awaiting callers if necessary.
     ///
     /// # Examples
     ///
     /// ```
     /// use lendpool::LendPool;
-    /// let pool = LendPool::new();
-    /// pool.add(42);
-    /// assert_eq!(pool.available(), 1);
+    ///
+    /// {
+    ///     let pool = LendPool::new();
+    ///     pool.add(42);
+    ///     assert_eq!(pool.available(), 1);
+    /// };
     /// ```
     pub fn add(&self, item: T) {
         self.available.fetch_add(1, Ordering::SeqCst);
@@ -163,28 +168,25 @@ impl<T> LendPool<T> {
         }
     }
 
-    /// Attempts to loan out an item from the pool immediately.
+    /// Attempts to loan out an item from the pool immediately (non-blocking).
     ///
-    /// This method does **not** block or wait. If an item is not immediately available,
-    /// it returns `None`.
-    ///
-    /// # Returns
-    ///
-    /// - [`Some(Loan)`] if the pool has an available item.
-    /// - [`None`] if the pool is empty.
+    /// If an item is available, returns `Some(Loan)`. Otherwise, returns `None`.
     ///
     /// # Examples
     ///
     /// ```
     /// use lendpool::LendPool;
-    /// let pool = LendPool::new();
-    /// pool.add(10);
     ///
-    /// if let Some(loan) = pool.loan() {
-    ///     println!("Got item: {}", *loan);
-    /// } else {
-    ///     println!("No items available!");
-    /// }
+    /// {
+    ///     let pool = LendPool::new();
+    ///     pool.add(10);
+    ///
+    ///     if let Some(loan) = pool.loan() {
+    ///         println!("Got item: {}", *loan);
+    ///     } else {
+    ///         println!("No items available!");
+    ///     }
+    /// };
     /// ```
     pub fn loan(&self) -> Option<Loan<T>> {
         self.queue
@@ -207,10 +209,13 @@ impl<T> LendPool<T> {
     ///
     /// ```
     /// use lendpool::LendPool;
-    /// let pool = LendPool::new();
-    /// pool.add('a');
-    /// pool.add('b');
-    /// assert_eq!(pool.available(), 2);
+    ///
+    /// {
+    ///     let pool = LendPool::new();
+    ///     pool.add('a');
+    ///     pool.add('b');
+    ///     assert_eq!(pool.available(), 2);
+    /// };
     /// ```
     pub fn available(&self) -> usize {
         self.available.load(Ordering::SeqCst)
@@ -218,18 +223,19 @@ impl<T> LendPool<T> {
 
     /// Indicates whether there is at least one item available to be loaned out.
     ///
-    /// Returns `true` if [`available`] > 0.
-    ///
     /// # Examples
     ///
     /// ```
     /// use lendpool::LendPool;
-    /// let pool = LendPool::new();
-    /// pool.add(42);
     ///
-    /// if pool.is_available() {
-    ///     println!("Pool has at least one item!");
-    /// }
+    /// {
+    ///     let pool = LendPool::new();
+    ///     pool.add(42);
+    ///
+    ///     if pool.is_available() {
+    ///         println!("Pool has at least one item!");
+    ///     }
+    /// };
     /// ```
     pub fn is_available(&self) -> bool {
         self.available() >= 1
@@ -241,13 +247,18 @@ impl<T> LendPool<T> {
     ///
     /// ```
     /// use lendpool::LendPool;
-    /// let pool = LendPool::new();
-    /// pool.add(100);
+    ///
     /// {
-    ///     let loan = pool.loan().unwrap();
-    ///     assert_eq!(pool.on_loan(), 1);
-    /// }
-    /// assert_eq!(pool.on_loan(), 0);
+    ///     let pool = LendPool::new();
+    ///     pool.add(100);
+    ///
+    ///     {
+    ///         let _loan = pool.loan().unwrap();
+    ///         assert_eq!(pool.on_loan(), 1);
+    ///     }
+    ///
+    ///     assert_eq!(pool.on_loan(), 0);
+    /// };
     /// ```
     pub fn on_loan(&self) -> usize {
         self.on_loan.load(Ordering::SeqCst)
@@ -255,18 +266,19 @@ impl<T> LendPool<T> {
 
     /// Indicates whether any items are currently on loan.
     ///
-    /// Returns `true` if [`on_loan`] > 0.
-    ///
     /// # Examples
     ///
     /// ```
     /// use lendpool::LendPool;
-    /// let pool = LendPool::new();
-    /// pool.add(1);
-    /// assert!(!pool.is_loaned());
     ///
-    /// let loan = pool.loan().unwrap();
-    /// assert!(pool.is_loaned());
+    /// {
+    ///     let pool = LendPool::new();
+    ///     pool.add(1);
+    ///     assert!(!pool.is_loaned());
+    ///
+    ///     let loan = pool.loan().unwrap();
+    ///     assert!(pool.is_loaned());
+    /// }
     /// ```
     pub fn is_loaned(&self) -> bool {
         self.on_loan() != 0
@@ -274,17 +286,20 @@ impl<T> LendPool<T> {
 
     /// Returns the total number of items managed by this pool.
     ///
-    /// This is the sum of [`available`] + [`on_loan`].
+    /// This is the sum of [`available()`][Self::available] + [`on_loan()`][Self::on_loan].
     ///
     /// # Examples
     ///
     /// ```
     /// use lendpool::LendPool;
-    /// let pool = LendPool::new();
-    /// pool.add(10);
-    /// pool.add(20);
-    /// let _loan = pool.loan().unwrap();
-    /// assert_eq!(pool.total(), 2);
+    ///
+    /// {
+    ///     let pool = LendPool::new();
+    ///     pool.add(10);
+    ///     pool.add(20);
+    ///     let _loan = pool.loan().unwrap();
+    ///     assert_eq!(pool.total(), 2);
+    /// }
     /// ```
     pub fn total(&self) -> usize {
         self.on_loan() + self.available()
@@ -307,10 +322,13 @@ impl<T> LendPool<T> {
     /// ```rust
     /// // Requires the "sync" feature to be enabled.
     /// use lendpool::LendPool;
-    /// let pool = LendPool::new();
-    /// pool.add(123);
-    /// let loan = pool.loan_sync();
-    /// println!("Loaned item: {}", *loan);
+    ///
+    /// fn main() {
+    ///     let pool = LendPool::new();
+    ///     pool.add(123);
+    ///     let loan = pool.loan_sync();
+    ///     println!("Loaned item: {}", *loan);
+    /// }
     /// ```
     pub fn loan_sync(&self) -> Loan<T> {
         loop {
@@ -336,16 +354,18 @@ impl<T> LendPool<T> {
     /// ```rust,ignore
     /// // Requires the "async" feature to be enabled.
     /// use tokio::runtime::Runtime;
-    /// use lend_pool::LendPool;
+    /// use lendpool::LendPool;
     ///
-    /// let rt = Runtime::new().unwrap();
-    /// rt.block_on(async {
-    ///     let pool = LendPool::new();
-    ///     pool.add(10);
+    /// fn main() {
+    ///     let rt = Runtime::new().unwrap();
+    ///     rt.block_on(async {
+    ///         let pool = LendPool::new();
+    ///         pool.add(10);
     ///
-    ///     let loan = pool.loan_async().await;
-    ///     println!("Loaned item: {}", *loan);
-    /// });
+    ///         let loan = pool.loan_async().await;
+    ///         println!("Loaned item: {}", *loan);
+    ///     });
+    /// }
     /// ```
     pub async fn loan_async(&self) -> Loan<T> {
         loop {
@@ -362,9 +382,7 @@ impl<T> LendPool<T> {
 ///
 /// A [`Loan`] is returned by methods like [`LendPool::loan`] and automatically
 /// returns the item to the pool upon being dropped. If you need to keep the item
-/// permanently, call [`take`] on the [`Loan`].
-///
-/// [`take`]: Loan::take
+/// permanently, call [`Loan::take`].
 #[derive(Debug)]
 pub struct Loan<'lp, T> {
     item: Option<T>,
@@ -376,18 +394,22 @@ impl<T> Loan<'_, T> {
     ///
     /// # Panics
     ///
-    /// Panics if the item has already been consumed via [`take`].
+    /// Panics if the item has already been consumed via [`take`][Self::take].
     ///
     /// # Examples
     ///
     /// ```
-    /// let pool = LendPool::new();
-    /// pool.add(1);
+    /// use lendpool::LendPool;
     ///
-    /// if let Some(mut loan) = pool.loan() {
-    ///     loan.map(|val| val + 1);
-    ///     assert_eq!(*loan, 2);
-    /// }
+    /// {
+    ///     let pool = LendPool::new();
+    ///     pool.add(1);
+    ///
+    ///     if let Some(mut loan) = pool.loan() {
+    ///         loan.map(|val| val + 1);
+    ///         assert_eq!(*loan, 2);
+    ///     }
+    /// };
     /// ```
     pub fn map(&mut self, f: impl FnOnce(T) -> T) {
         let item = self.item.take().expect("loan already consumed");
@@ -396,23 +418,24 @@ impl<T> Loan<'_, T> {
 
     /// Provides read-only access to the loaned item.
     ///
-    /// The closure receives an immutable reference to the item and returns a result `R`.
-    ///
     /// # Panics
     ///
-    /// Panics if the item has already been consumed via [`take`].
+    /// Panics if the item has already been consumed via [`take`][Self::take].
     ///
     /// # Examples
     ///
     /// ```
     /// use lendpool::LendPool;
-    /// let pool = LendPool::new();
-    /// pool.add(100);
     ///
-    /// if let Some(loan) = pool.loan() {
-    ///     let x = loan.with(|val| *val + 1);
-    ///     assert_eq!(x, 101);
-    /// }
+    /// {
+    ///     let pool = LendPool::new();
+    ///     pool.add(100);
+    ///
+    ///     if let Some(loan) = pool.loan() {
+    ///         let x = loan.with(|val| *val + 1);
+    ///         assert_eq!(x, 101);
+    ///     }
+    /// };
     /// ```
     pub fn with<R>(&self, f: impl FnOnce(&T) -> R) -> R {
         f(self.item.as_ref().expect("loan already consumed"))
@@ -420,22 +443,23 @@ impl<T> Loan<'_, T> {
 
     /// Provides mutable access to the loaned item.
     ///
-    /// The closure receives a mutable reference to the item and returns a result `R`.
-    ///
     /// # Panics
     ///
-    /// Panics if the item has already been consumed via [`take`].
+    /// Panics if the item has already been consumed via [`take`][Self::take].
     ///
     /// # Examples
     ///
     /// ```
     /// use lendpool::LendPool;
-    /// let pool = LendPool::new();
-    /// pool.add(String::from("Hello"));
     ///
-    /// if let Some(mut loan) = pool.loan() {
-    ///     loan.with_mut(|s| s.push_str(" World"));
-    ///     assert_eq!(*loan, "Hello World");
+    /// {
+    ///     let pool = LendPool::new();
+    ///     pool.add(String::from("Hello"));
+    ///
+    ///     if let Some(mut loan) = pool.loan() {
+    ///         loan.with_mut(|s| s.push_str(" World"));
+    ///         assert_eq!(*loan, "Hello World");
+    ///     }
     /// }
     /// ```
     pub fn with_mut<R>(&mut self, f: impl FnOnce(&mut T) -> R) -> R {
@@ -455,15 +479,18 @@ impl<T> Loan<'_, T> {
     ///
     /// ```
     /// use lendpool::LendPool;
-    /// let pool = LendPool::new();
-    /// pool.add(42);
     ///
-    /// if let Some(loan) = pool.loan() {
-    ///     let item = loan.take();
-    ///     // `item` is now fully yours, and not returned to the pool.
+    /// {
+    ///     let pool = LendPool::new();
+    ///     pool.add(42);
+    ///
+    ///     if let Some(loan) = pool.loan() {
+    ///         let item = loan.take();
+    ///         // `item` is now fully yours, and not returned to the pool.
+    ///     }
+    ///     assert_eq!(pool.available(), 0);
+    ///     assert_eq!(pool.on_loan(), 0);
     /// }
-    /// assert_eq!(pool.available(), 0);
-    /// assert_eq!(pool.on_loan(), 0);
     /// ```
     pub fn take(mut self) -> T {
         let item = self.item.take().expect("loan already consumed");
@@ -477,15 +504,18 @@ impl<T> Loan<'_, T> {
     ///
     /// ```
     /// use lendpool::LendPool;
-    /// let pool = LendPool::new();
-    /// pool.add('a');
-    /// pool.add('b');
     ///
-    /// let mut loan1 = pool.loan().unwrap();
-    /// let mut loan2 = pool.loan().unwrap();
+    /// {
+    ///     let pool = LendPool::new();
+    ///     pool.add('a');
+    ///     pool.add('b');
     ///
-    /// loan1.swap_pool(&mut loan2);
-    /// // Now loan1 has what loan2 had, and vice versa.
+    ///     let mut loan1 = pool.loan().unwrap();
+    ///     let mut loan2 = pool.loan().unwrap();
+    ///
+    ///     loan1.swap_pool(&mut loan2);
+    ///     // Now loan1 has what loan2 had, and vice versa.
+    /// }
     /// ```
     pub fn swap_pool(&mut self, other: &mut Loan<'_, T>) {
         mem::swap(&mut self.item, &mut other.item)
@@ -495,24 +525,35 @@ impl<T> Loan<'_, T> {
 impl<'lp, T> Loan<'lp, T> {
     /// Moves the `Loan` into another type that references the same [`LendPool`].
     ///
-    /// This can be useful if you have a wrapped type that implements [`PoolRef`], and you
-    /// want this `Loan` to be associated with that reference instead.
-    ///
-    /// # Safety
-    ///
-    /// You must ensure the target reference points to the same `LendPool` to avoid undefined
-    /// behavior.
+    /// To demonstrate this properly in a doc test, you need a second type that implements
+    /// [`PoolRef`], **not** `loan.move_pool(&loan)`, which would cause a borrow conflict.
     ///
     /// # Examples
     ///
     /// ```
-    /// use lendpool::LendPool;
-    /// let pool = LendPool::new();
-    /// pool.add(10);
+    /// use lendpool::{LendPool, PoolRef, Loan};
     ///
-    /// if let Some(mut loan) = pool.loan() {
-    ///     // This is a contrived example, normally you'd have a distinct type implementing `PoolRef`.
-    ///     loan.move_pool(&loan);
+    /// // A contrived type that also has a reference to the same pool
+    /// struct MyPoolRef<'p, T> {
+    ///     inner: &'p LendPool<T>,
+    /// }
+    ///
+    /// impl<'lp, 'p, T> PoolRef<'lp, T> for MyPoolRef<'p, T> {
+    ///     fn pool_ref(&'lp self) -> &'lp LendPool<T> {
+    ///         self.inner
+    ///     }
+    /// }
+    ///
+    /// {
+    ///     let pool = LendPool::new();
+    ///     pool.add(10);
+    ///
+    ///     if let Some(mut loan) = pool.loan() {
+    ///         // Create a second type referencing the same pool
+    ///         let alt_ref = MyPoolRef { inner: &pool };
+    ///         // Move the loan from referencing `pool` directly to referencing `alt_ref`.
+    ///         loan.move_pool(&alt_ref);
+    ///     }
     /// }
     /// ```
     pub fn move_pool(&mut self, pool: &'lp (impl PoolRef<'lp, T> + 'lp)) {
@@ -525,7 +566,7 @@ impl<T> AsRef<T> for Loan<'_, T> {
     ///
     /// # Panics
     ///
-    /// Panics if the item has already been consumed via [`take`].
+    /// Panics if the item has already been consumed via [`take`][Self::take].
     fn as_ref(&self) -> &T {
         self.item.as_ref().expect("loan already consumed")
     }
@@ -536,7 +577,7 @@ impl<T> AsMut<T> for Loan<'_, T> {
     ///
     /// # Panics
     ///
-    /// Panics if the item has already been consumed via [`take`].
+    /// Panics if the item has already been consumed via [`take`][Self::take].
     fn as_mut(&mut self) -> &mut T {
         self.item.as_mut().expect("loan already consumed")
     }
@@ -549,7 +590,7 @@ impl<T> Deref for Loan<'_, T> {
     ///
     /// # Panics
     ///
-    /// Panics if the item has already been consumed via [`take`].
+    /// Panics if the item has already been consumed via [`take`][Self::take].
     fn deref(&self) -> &Self::Target {
         self.as_ref()
     }
@@ -560,14 +601,14 @@ impl<T> DerefMut for Loan<'_, T> {
     ///
     /// # Panics
     ///
-    /// Panics if the item has already been consumed via [`take`].
+    /// Panics if the item has already been consumed via [`take`][Self::take].
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.as_mut()
     }
 }
 
 impl<T> Drop for Loan<'_, T> {
-    /// Returns the loaned item to the pool on drop, unless it was [`take`]n.
+    /// Returns the loaned item to the pool on drop, unless it was [`take`][Self::take]n.
     ///
     /// This also decrements the on-loan count and enqueues the item back to the pool’s queue if
     /// present.
@@ -602,7 +643,8 @@ impl<'lp, T> PoolRef<'lp, T> for Loan<'lp, T> {
 impl<T> Debug for LendPool<T> {
     /// Formats the `LendPool` for debugging.
     ///
-    /// Displays the number of `available` items, the count of items `on_loan`, and the `total`.
+    /// Displays the number of [`available()`][Self::available] items,
+    /// the count of items [`on_loan()`][Self::on_loan], and the [`total()`][Self::total].
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("LendPool")
             .field("available", &self.available())
